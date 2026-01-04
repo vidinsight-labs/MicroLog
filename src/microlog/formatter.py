@@ -76,10 +76,17 @@ class JSONFormatter(logging.Formatter):
                     log_data[key] = self._serialize_value(value)
 
         if record.exc_info:
+            # exc_info True ise sys.exc_info() çağrılmalı
+            if record.exc_info is True:
+                import sys
+                exc_info = sys.exc_info()
+            else:
+                exc_info = record.exc_info
+            
             log_data["exception"] = {
-                "type": record.exc_info[0].__name__ if record.exc_info[0] else None,
-                "message": str(record.exc_info[1]) if record.exc_info[1] else None,
-                "traceback": self.formatException(record.exc_info)
+                "type": exc_info[0].__name__ if exc_info[0] else None,
+                "message": str(exc_info[1]) if exc_info[1] else None,
+                "traceback": self.formatException(exc_info)
             }
 
         return json.dumps(log_data, ensure_ascii=False, default=str)

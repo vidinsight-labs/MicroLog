@@ -1,5 +1,5 @@
 """
-context.py - Trace ve Span ID Yönetimi
+context.py — Trace ve Span ID Yönetimi
 
 Bu modül ne yapar?
 - Thread-safe context yönetimi (her thread kendi context'ini görür)
@@ -340,6 +340,8 @@ class trace:
             self.context = parent.child_span()
             if correlation_id:
                 self.context.correlation_id = correlation_id
+            if session_id:
+                self.context.session_id = session_id
             self.context.extra.update(extra)
         
         else:

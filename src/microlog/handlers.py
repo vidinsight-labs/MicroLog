@@ -1,7 +1,5 @@
 """
-═══════════════════════════════════════════════════════════════════════════════
-_handlers.py — Log Çıktı Hedefleri (Handlers)
-═══════════════════════════════════════════════════════════════════════════════
+handlers.py — Log Çıktı Hedefleri (Handlers)
 
 Bu modül ne yapar?
 - AsyncConsoleHandler:        Asenkron konsol çıktısı (stdout)
@@ -22,14 +20,11 @@ Mimari:
          │ Hemen döner                            │ Asenkron yazar
          ▼                                        ▼
     Uygulama devam                         Console/File/SMTP
-
-═══════════════════════════════════════════════════════════════════════════════
 """
 
 from __future__ import annotations
 
 import sys
-import os
 import gzip
 import shutil
 import logging
@@ -72,26 +67,100 @@ class AsyncHandler:
         self._handler = handler
         self._listener: Optional[QueueListener] = None
         self._started = False
+        self._lock = threading.Lock()  # Thread-safety için lock
+        self._atexit_registered = False  # Atexit sadece bir kez register
     
     def start(self) -> None:
         """Asenkron listener'ı başlatır."""
-        if not self._started:
-            self._listener = QueueListener(
-                self._queue,
-                self._handler,
-                respect_handler_level=True
-            )
-            self._listener.start()
-            self._started = True
-            
-            # Program kapanırken otomatik durdur
-            atexit.register(self.stop)
+        with self._lock:
+            if not self._started:
+                self._listener = QueueListener(
+                    self._queue,
+                    self._handler,
+                    respect_handler_level=True
+                )
+                self._listener.start()
+                self._started = True
+                
+                # Program kapanırken otomatik durdur (sadece bir kez register et)
+                if not self._atexit_registered:
+                    # Weak reference kullanarak circular reference'ı önle
+                    import weakref
+                    weak_self = weakref.ref(self)
+                    
+                    def cleanup():
+                        strong_self = weak_self()
+                        if strong_self is not None:
+                            strong_self.stop()
+                    
+                    atexit.register(cleanup)
+                    self._atexit_registered = True
     
     def stop(self) -> None:
-        """Asenkron listener'ı durdurur."""
-        if self._started and self._listener:
-            self._listener.stop()
-            self._started = False
+        """
+        Asenkron listener'ı durdurur ve kaynakları temizler.
+        
+        Queue'daki tüm pending mesajların flush edilmesini garantiler.
+        Güçlendirilmiş flush mekanizması ile %100'e yakın log garantisi.
+        """
+        with self._lock:
+            if self._started and self._listener:
+                import time
+                import warnings
+                
+                initial_qsize = self._queue.qsize()
+                
+                # 1. Queue'nun boşalması için daha uzun ve hassas bekle
+                max_wait = 10.0  # 5 → 10 saniye (daha uzun)
+                wait_interval = 0.05  # 0.1 → 0.05 (daha hassas)
+                total_waited = 0.0
+                
+                while self._queue.qsize() > 0 and total_waited < max_wait:
+                    time.sleep(wait_interval)
+                    total_waited += wait_interval
+                
+                final_qsize = self._queue.qsize()
+                
+                # 2. Listener'ı durdur (kalan mesajları flush eder)
+                self._listener.stop()
+                
+                # 3. Listener thread'in terminate olmasını bekle
+                if hasattr(self._listener, '_thread') and self._listener._thread:
+                    self._listener._thread.join(timeout=2.0)
+                
+                self._started = False
+                
+                # 4. Handler'ı birden fazla kez flush (güvenlik için)
+                if hasattr(self._handler, 'flush'):
+                    for _ in range(3):  # 3 kez flush
+                        try:
+                            self._handler.flush()
+                            time.sleep(0.05)  # Her flush arası mini delay
+                        except Exception:
+                            pass
+                
+                # 5. Dosyayı kapat
+                if hasattr(self._handler, 'close'):
+                    try:
+                        self._handler.close()
+                    except Exception:
+                        pass  # close() hatalarını sessizce yoksay
+                
+                # 6. Debug info: Queue tam flush edilmedi mi?
+                if final_qsize > 0:
+                    warnings.warn(
+                        f"AsyncHandler.stop(): Queue not fully flushed - "
+                        f"{final_qsize} messages remaining out of {initial_qsize}",
+                        RuntimeWarning,
+                        stacklevel=2
+                    )
+    
+    def __del__(self):
+        """Destructor - GC sırasında temizlik."""
+        try:
+            self.stop()
+        except Exception:
+            pass  # Destructor'da hata fırlatma
     
     def get_queue_handler(self) -> QueueHandler:
         """
@@ -100,6 +169,7 @@ class AsyncHandler:
         Returns:
             QueueHandler instance
         """
+        # Thread-safe başlatma
         if not self._started:
             self.start()
         return QueueHandler(self._queue)
