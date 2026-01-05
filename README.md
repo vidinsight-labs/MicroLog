@@ -1,3 +1,6 @@
+
+<img width="1584" height="396" alt="LinkedIn Banner Design" src="https://github.com/user-attachments/assets/8692e053-14f7-4e7a-8320-24a518e275ba" />
+
 # MicroLog - Modern Python Logging Kütüphanesi
 
 MicroLog, production ortamları için tasarlanmış, thread-safe, asenkron Python logging kütüphanesidir. Distributed tracing desteği, yüksek performans ve kolay kullanım sunar.
