@@ -228,9 +228,9 @@ def setup_file_logger(
         filename=filename,
         max_bytes=max_bytes,
         backup_count=backup_count,
-        compress=compress,
-        level=level
+        compress=compress
     )
+    handler.get_queue_handler().setLevel(level)
     
     if format_type == "json":
         formatter = JSONFormatter(service_name=service_name or name)

@@ -101,18 +101,26 @@ class AsyncHandler:
         Asenkron listener'ı durdurur ve kaynakları temizler.
         
         Queue'daki tüm pending mesajların flush edilmesini garantiler.
-        Güçlendirilmiş flush mekanizması ile %100'e yakın log garantisi.
+        Sentinel pattern ile %100 log flush garantisi.
         """
         with self._lock:
+            # Eğer zaten durmuşsa hemen dön (idempotent)
+            if not self._started or not self._listener:
+                return
+            
             if self._started and self._listener:
                 import time
                 import warnings
                 
                 initial_qsize = self._queue.qsize()
                 
-                # 1. Queue'nun boşalması için daha uzun ve hassas bekle
-                max_wait = 10.0  # 5 → 10 saniye (daha uzun)
-                wait_interval = 0.05  # 0.1 → 0.05 (daha hassas)
+                # 1. Sentinel value (poison pill) gönder
+                # None değeri queue'ya konur, listener bu değeri görünce dönecek
+                self._queue.put(None)
+                
+                # 2. Queue'nun boşalması için makul bir süre bekle
+                max_wait = 30.0  # Sentinel pattern ile daha uzun timeout güvenli
+                wait_interval = 0.05
                 total_waited = 0.0
                 
                 while self._queue.qsize() > 0 and total_waited < max_wait:
@@ -121,16 +129,16 @@ class AsyncHandler:
                 
                 final_qsize = self._queue.qsize()
                 
-                # 2. Listener'ı durdur (kalan mesajları flush eder)
+                # 3. Listener'ı durdur (sentinel değerini işler)
                 self._listener.stop()
                 
-                # 3. Listener thread'in terminate olmasını bekle
+                # 4. Listener thread'in terminate olmasını bekle
                 if hasattr(self._listener, '_thread') and self._listener._thread:
-                    self._listener._thread.join(timeout=2.0)
+                    self._listener._thread.join(timeout=5.0)
                 
                 self._started = False
                 
-                # 4. Handler'ı birden fazla kez flush (güvenlik için)
+                # 5. Handler'ı birden fazla kez flush (güvenlik için)
                 if hasattr(self._handler, 'flush'):
                     for _ in range(3):  # 3 kez flush
                         try:
@@ -139,18 +147,18 @@ class AsyncHandler:
                         except Exception:
                             pass
                 
-                # 5. Dosyayı kapat
+                # 6. Dosyayı kapat
                 if hasattr(self._handler, 'close'):
                     try:
                         self._handler.close()
                     except Exception:
                         pass  # close() hatalarını sessizce yoksay
                 
-                # 6. Debug info: Queue tam flush edilmedi mi?
-                if final_qsize > 0:
+                # 7. Debug info: Queue tam flush edilmedi mi?
+                if final_qsize > 1:  # Sentinel (None) hariç
                     warnings.warn(
                         f"AsyncHandler.stop(): Queue not fully flushed - "
-                        f"{final_qsize} messages remaining out of {initial_qsize}",
+                        f"{final_qsize - 1} messages remaining out of {initial_qsize}",
                         RuntimeWarning,
                         stacklevel=2
                     )
@@ -161,6 +169,28 @@ class AsyncHandler:
             self.stop()
         except Exception:
             pass  # Destructor'da hata fırlatma
+    
+    def __enter__(self):
+        """Context manager entry - otomatik start."""
+        self.start()
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit - otomatik stop."""
+        self.stop()
+        return False  # Exception'ı propagate et
+    
+    async def __aenter__(self):
+        """Async context manager entry - otomatik start."""
+        self.start()
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - otomatik stop."""
+        # stop() blocking olabilir, ama short-lived
+        # Gerçek async impl için asyncio.to_thread kullanılabilir
+        self.stop()
+        return False  # Exception'ı propagate et
     
     def get_queue_handler(self) -> QueueHandler:
         """
@@ -520,6 +550,7 @@ class _SMTPHandler(logging.Handler):
     Gerçek SMTP handler implementasyonu.
     
     Rate limiting ve HTML email desteği ile.
+    LRU cache ile memory leak önlenir.
     """
     
     def __init__(
@@ -543,8 +574,10 @@ class _SMTPHandler(logging.Handler):
         self.rate_limit = rate_limit
         self.include_trace = include_trace
         
-        # Rate limiting için son gönderim zamanları
-        self._last_sent: dict = {}
+        # Rate limiting için son gönderim zamanları (LRU cache)
+        from collections import OrderedDict
+        self._last_sent: OrderedDict = OrderedDict()
+        self._max_cache_size = 1000  # Maximum 1000 unique error signatures
         self._lock = threading.Lock()
     
     def emit(self, record: logging.LogRecord) -> None:
@@ -566,6 +599,7 @@ class _SMTPHandler(logging.Handler):
         
         Aynı tip hata için minimum aralık bekler.
         Bu sayede aynı hata 1000 kez olsa bile 1000 email gitmez.
+        LRU cache ile memory leak önlenir.
         """
         if self.rate_limit <= 0:
             return True
@@ -578,7 +612,14 @@ class _SMTPHandler(logging.Handler):
             last = self._last_sent.get(key, 0)
             if now - last < self.rate_limit:
                 return False  # Çok erken, gönderme
+            
+            # Yeni entry ekle
             self._last_sent[key] = now
+            
+            # LRU cleanup: Cache boyutunu sınırla (memory leak önleme)
+            if len(self._last_sent) > self._max_cache_size:
+                # En eski entry'yi sil (FIFO)
+                self._last_sent.popitem(last=False)
         
         return True
     

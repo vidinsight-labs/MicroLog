@@ -75,6 +75,37 @@ from .context import (
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# CONFIG - Configuration File Support
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from .config import (
+    load_config,
+    load_config_from_env,
+    setup_from_config,
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FILTERS - Logging Filters (PII, Sampling, Rate Limiting)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from .filters import (
+    PIIFilter,
+    SamplingFilter,
+    RateLimitFilter,
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# METRICS - Observability (Prometheus)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from .metrics import (
+    MetricsHandler,
+    QueueMetricsCollector,
+    setup_metrics,
+    PROMETHEUS_AVAILABLE,
+)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # DECORATORS - Automatic Logging
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -101,6 +132,22 @@ __all__ = [
     "setup_production_logger",
     "get_logger",
     "TraceContextFilter",
+    
+    # Config
+    "load_config",
+    "load_config_from_env",
+    "setup_from_config",
+    
+    # Filters
+    "PIIFilter",
+    "SamplingFilter",
+    "RateLimitFilter",
+    
+    # Metrics
+    "MetricsHandler",
+    "QueueMetricsCollector",
+    "setup_metrics",
+    "PROMETHEUS_AVAILABLE",
     
     # Handlers
     "AsyncHandler",

@@ -1,0 +1,46 @@
+# MicroLog Configuration Example
+# Detaylı kullanım için: docs/DETAYLI_KULLANIM.md
+
+logging:
+  # Logger adı
+  name: myapp
+  
+  # Log seviyesi (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: INFO
+  
+  # Service adı (trace context için)
+  service_name: myapp-service
+  
+  # Formatter ayarları
+  formatter:
+    type: json  # json, pretty, compact
+    service_name: myapp-service
+    include_extra: true
+  
+  # Handler'lar
+  handlers:
+    # Console handler
+    - type: console
+      level: INFO
+    
+    # File handler (rotation ile)
+    - type: file
+      filename: logs/app.log
+      max_bytes: 10485760  # 10 MB
+      backup_count: 5
+      compress: true
+      level: DEBUG
+    
+    # SMTP handler (email alerts)
+    # - type: smtp
+    #   mailhost: [smtp.gmail.com, 587]
+    #   fromaddr: alerts@myapp.com
+    #   toaddrs:
+    #     - admin@myapp.com
+    #     - devops@myapp.com
+    #   subject: MyApp Alert
+    #   credentials: [your-email@gmail.com, your-password]
+    #   secure: true
+    #   rate_limit: 300  # 5 dakika
+    #   level: ERROR
+

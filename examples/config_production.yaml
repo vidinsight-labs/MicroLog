@@ -1,0 +1,47 @@
+# MicroLog Production Configuration
+# Production ortamı için optimize edilmiş ayarlar
+
+logging:
+  name: production-service
+  level: INFO  # Production'da DEBUG kullanma
+  service_name: production-service
+  
+  formatter:
+    type: json  # Production'da JSON kullan (log aggregation için)
+    service_name: production-service
+    include_extra: true
+  
+  handlers:
+    # Console: JSON format
+    - type: console
+      level: INFO
+    
+    # Application logs: JSON format, rotation
+    - type: file
+      filename: /var/log/myapp/application.log
+      max_bytes: 52428800  # 50 MB
+      backup_count: 10
+      compress: true
+      level: INFO
+    
+    # Error logs: Ayrı dosya, daha uzun retention
+    - type: file
+      filename: /var/log/myapp/error.log
+      max_bytes: 10485760  # 10 MB
+      backup_count: 30
+      compress: true
+      level: ERROR
+    
+    # Critical alerts: Email
+    - type: smtp
+      mailhost: [smtp.example.com, 587]
+      fromaddr: alerts@myapp.com
+      toaddrs:
+        - oncall@myapp.com
+        - devops@myapp.com
+      subject: "CRITICAL: Production Alert"
+      credentials: [alerts@myapp.com, "${SMTP_PASSWORD}"]
+      secure: true
+      rate_limit: 600  # 10 dakika (spam önleme)
+      level: CRITICAL
+
