@@ -74,7 +74,7 @@ def setup_logger(
     
     Returns:
         Logger veya (Logger, List[AsyncHandler]) tuple
-        
+    
     Kullanım:
         # Basit - default console handler (geriye uyumlu)
         logger = setup_logger("myapp")

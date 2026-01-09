@@ -55,7 +55,7 @@ class TestSetupLogger:
         
         assert len(logger.handlers) == 1
         handler.stop()
-    
+
     def test_setup_logger_return_handlers(self, clean_loggers):
         """setup_logger return_handlers=True ile handler'ları döndürür"""
         logger, handlers = setup_logger(
