@@ -57,8 +57,9 @@ def setup_logger(
     level: int = logging.INFO,
     service_name: Optional[str] = None,
     handlers: Optional[List[HandlerConfig]] = None,
-    add_trace_filter: bool = True
-) -> logging.Logger:
+    add_trace_filter: bool = True,
+    return_handlers: bool = False
+) -> Union[logging.Logger, tuple[logging.Logger, List[AsyncHandler]]]:
     """
     Logger oluşturur.
     
@@ -68,13 +69,25 @@ def setup_logger(
         service_name: Servis adı (default: name)
         handlers:     HandlerConfig listesi
         add_trace_filter: Trace filter ekle
+        return_handlers: Handler'ları da döndür mü? (default: False)
+                        True ise (logger, handlers) tuple döner
     
+    Returns:
+        Logger veya (Logger, List[AsyncHandler]) tuple
+        
     Kullanım:
-        # Basit - default console handler
+        # Basit - default console handler (geriye uyumlu)
         logger = setup_logger("myapp")
         
         # Servis adıyla
         logger = setup_logger("myapp", service_name="order-service")
+        
+        # Handler'ları da al (yeni özellik)
+        logger, handlers = setup_logger("myapp", return_handlers=True)
+        
+        # Program sonunda (opsiyonel - atexit zaten var)
+        for handler in handlers:
+            handler.stop()
         
         # Farklı formatter'larla
         logger = setup_logger("myapp", handlers=[
@@ -99,7 +112,9 @@ def setup_logger(
             )
         ]
     
-    # Handler'ları ekle
+    # Handler'ları ekle ve topla
+    created_handlers: List[AsyncHandler] = []
+    
     for config in handlers:
         handler = config.handler
         formatter = config.formatter or PrettyFormatter(service_name=svc)
@@ -109,6 +124,7 @@ def setup_logger(
             handler.handler.setFormatter(formatter)
             handler.handler.setLevel(handler_level)
             logger.addHandler(handler.get_queue_handler())
+            created_handlers.append(handler)  # Handler'ı kaydet
         else:
             handler.setFormatter(formatter)
             handler.setLevel(handler_level)
@@ -120,7 +136,11 @@ def setup_logger(
         if not has_trace_filter:
             logger.addFilter(TraceContextFilter())
     
-    return logger
+    # Return type'a göre döndür
+    if return_handlers:
+        return logger, created_handlers
+    else:
+        return logger
 
 
 def configure_logger(
@@ -182,8 +202,9 @@ def setup_console_logger(
     name: str = "root",
     level: int = logging.INFO,
     service_name: Optional[str] = None,
-    use_colors: bool = True
-) -> logging.Logger:
+    use_colors: bool = True,
+    return_handlers: bool = False
+) -> Union[logging.Logger, tuple[logging.Logger, List[AsyncHandler]]]:
     """
     Sadece console handler ile logger kurar.
     
@@ -192,9 +213,11 @@ def setup_console_logger(
         level:        Log seviyesi
         service_name: Servis adı
         use_colors:   Renkli çıktı kullan
+        return_handlers: Handler'ları da döndür mü? (default: False)
     
     Kullanım:
         logger = setup_console_logger("myapp", use_colors=True)
+        logger, handlers = setup_console_logger("myapp", return_handlers=True)
     """
     
     return setup_logger(
@@ -208,7 +231,8 @@ def setup_console_logger(
                     use_colors=use_colors
                 )
             )
-        ]
+        ],
+        return_handlers=return_handlers
     )
 
 
@@ -220,8 +244,9 @@ def setup_file_logger(
     max_bytes: int = 10 * 1024 * 1024,
     backup_count: int = 5,
     compress: bool = True,
-    format_type: str = "json"
-) -> logging.Logger:
+    format_type: str = "json",
+    return_handlers: bool = False
+) -> Union[logging.Logger, tuple[logging.Logger, List[AsyncHandler]]]:
     """
     Sadece file handler ile logger kurar.
     
@@ -234,9 +259,11 @@ def setup_file_logger(
         backup_count: Backup dosya sayısı
         compress:     Sıkıştırma kullan
         format_type:  "json", "compact", veya "pretty"
+        return_handlers: Handler'ları da döndür mü? (default: False)
     
     Kullanım:
         logger = setup_file_logger("myapp", filename="app.log", format_type="json")
+        logger, handlers = setup_file_logger("myapp", return_handlers=True)
     """
     
     # Formatter seç
@@ -268,5 +295,6 @@ def setup_file_logger(
                 ),
                 formatter=formatter
             )
-        ]
+        ],
+        return_handlers=return_handlers
     )

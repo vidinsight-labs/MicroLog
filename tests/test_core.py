@@ -55,6 +55,29 @@ class TestSetupLogger:
         
         assert len(logger.handlers) == 1
         handler.stop()
+    
+    def test_setup_logger_return_handlers(self, clean_loggers):
+        """setup_logger return_handlers=True ile handler'ları döndürür"""
+        logger, handlers = setup_logger(
+            name="test_return_handlers",
+            return_handlers=True
+        )
+        
+        assert logger.name == "test_return_handlers"
+        assert isinstance(handlers, list)
+        assert len(handlers) > 0
+        assert all(hasattr(h, 'stop') for h in handlers)
+        
+        # Handler'ları temizle
+        for handler in handlers:
+            handler.stop()
+    
+    def test_setup_logger_backward_compatibility(self, clean_loggers):
+        """setup_logger geriye uyumlu - return_handlers=False varsayılan"""
+        logger = setup_logger(name="test_backward")
+        
+        assert isinstance(logger, logging.Logger)
+        assert logger.name == "test_backward"
 
 
 class TestSetupConsoleLogger:
@@ -79,6 +102,20 @@ class TestSetupConsoleLogger:
         )
         
         assert len(logger.handlers) > 0
+    
+    def test_setup_console_logger_return_handlers(self, clean_loggers):
+        """setup_console_logger return_handlers=True ile handler'ları döndürür"""
+        logger, handlers = setup_console_logger(
+            name="test_console_handlers",
+            return_handlers=True
+        )
+        
+        assert logger.name == "test_console_handlers"
+        assert isinstance(handlers, list)
+        assert len(handlers) == 1
+        
+        # Handler'ı temizle
+        handlers[0].stop()
 
 
 class TestSetupFileLogger:
@@ -118,6 +155,23 @@ class TestSetupFileLogger:
             for handler in logger.handlers:
                 if hasattr(handler, 'stop'):
                     handler.stop()
+    
+    def test_setup_file_logger_return_handlers(self, clean_loggers, temp_log_file):
+        """setup_file_logger return_handlers=True ile handler'ları döndürür"""
+        logger, handlers = setup_file_logger(
+            name="test_file_handlers",
+            filename=temp_log_file,
+            return_handlers=True
+        )
+        
+        assert logger.name == "test_file_handlers"
+        assert isinstance(handlers, list)
+        assert len(handlers) == 1
+        
+        logger.info("Test message")
+        
+        # Handler'ı temizle
+        handlers[0].stop()
 
 
 class TestTraceContextFilter:
