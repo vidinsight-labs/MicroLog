@@ -20,6 +20,14 @@ MicroLog is a thread-safe, asynchronous Python logging library designed for prod
 
 ## Installation
 
+### From PyPI
+
+```bash
+pip install vi-microlog
+```
+
+### From Source
+
 ```bash
 # Clone the repository
 git clone https://github.com/vidinsight-labs/MicroLog.git

@@ -7,7 +7,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
     long_description = f.read()
 
 setup(
-    name="microlog",
+    name="vi-microlog",
     version="0.1.0",
     author="VidInsight Yazılım ve Teknoloji Anonim Şirketi",
     author_email="info@vidinsight.com",

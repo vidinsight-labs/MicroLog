@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"  # Build backend: setuptools kullanılac
 # ═══════════════════════════════════════════════════════════════════════════════
 # PyPI'de görünecek ve paket kurulumunda kullanılacak temel bilgiler
 [project]
-name = "microlog"  # Paket adı (PyPI'de görünecek, pip install microlog)
+name = "vi-microlog"  # Paket adı (PyPI'de görünecek, pip install vi-microlog)
 version = "0.1.0"  # SemVer formatında versiyon numarası
 description = "MicroLog, Python için yüksek performanslı asenkron logging kütüphanesidir."  # Tek satır kısa açıklama
 readme = "README.md"  # README dosyası (PyPI'de uzun açıklama olarak gösterilir, format otomatik algılanır)
