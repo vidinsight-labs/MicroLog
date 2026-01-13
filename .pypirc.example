@@ -1,0 +1,23 @@
+# .pypirc - PyPI yükleme yapılandırması (ÖRNEK)
+# Bu dosyayı ~/.pypirc olarak kopyalayın ve bilgilerinizi girin
+# VEYA twine ile doğrudan kullanıcı adı/şifre girebilirsiniz
+
+[distutils]
+index-servers =
+    pypi
+    testpypi
+
+[pypi]
+username = __token__
+password = pypi-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+[testpypi]
+repository = https://test.pypi.org/legacy/
+username = __token__
+password = pypi-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Kullanım:
+# 1. PyPI'de API token oluşturun: https://pypi.org/manage/account/token/
+# 2. Bu dosyayı ~/.pypirc olarak kopyalayın
+# 3. Token'ı password alanına yapıştırın
+# 4. twine upload dist/* komutu ile yükleyin
