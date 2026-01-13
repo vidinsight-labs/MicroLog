@@ -1,0 +1,11 @@
+# MANIFEST.in - PyPI'ye dahil edilecek ek dosyalar
+# Not: pyproject.toml zaten README.md ve LICENSE'ı otomatik dahil eder
+# Bu dosya sadece ek dosyalar için gereklidir
+
+# README ve LICENSE zaten pyproject.toml'da tanımlı
+# include README.md
+# include LICENSE
+
+# Eğer ek dosyalar eklenirse (örnekler, dokümantasyon, vb.):
+# recursive-include examples *.py *.md
+# recursive-include docs *.md

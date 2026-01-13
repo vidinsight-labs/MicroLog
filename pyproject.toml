@@ -1,0 +1,127 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUILD SYSTEM YAPILANDIRMASI
+# ═══════════════════════════════════════════════════════════════════════════════
+# Paket oluşturma (build) için kullanılacak araçları belirtir (PEP 517/518)
+# pip install . veya python -m build komutları bu yapılandırmayı kullanır
+[build-system]
+requires = ["setuptools>=45", "wheel"]  # Build için gereken minimum paketler
+build-backend = "setuptools.build_meta"  # Build backend: setuptools kullanılacak
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROJE METADATA (PEP 621)
+# ═══════════════════════════════════════════════════════════════════════════════
+# PyPI'de görünecek ve paket kurulumunda kullanılacak temel bilgiler
+[project]
+name = "microlog"  # Paket adı (PyPI'de görünecek, pip install microlog)
+version = "0.1.0"  # SemVer formatında versiyon numarası
+description = "MicroLog, Python için yüksek performanslı asenkron logging kütüphanesidir."  # Tek satır kısa açıklama
+readme = "README.md"  # README dosyası (PyPI'de uzun açıklama olarak gösterilir, format otomatik algılanır)
+requires-python = ">=3.7"  # Minimum Python versiyonu gereksinimi
+license = {text = "MIT"}  # Lisans tipi (MIT, Apache-2.0, GPL-3.0, vb.)
+
+# Yazar bilgileri (birden fazla yazar için liste)
+authors = [
+    {name = "VidInsight Yazılım ve Teknoloji Anonim Şirketi", email = "info@vidinsight.com"}
+]
+
+# Bakımcı bilgileri (yazar ile aynı olabilir veya farklı olabilir)
+maintainers = [
+    {name = "VidInsight Yazılım ve Teknoloji Anonim Şirketi", email = "info@vidinsight.com"}
+]
+
+# Anahtar kelimeler (PyPI'de arama için kullanılır)
+keywords = ["logging", "async", "asynchronous", "distributed-tracing", "microservices", "trace-context"]
+
+# PyPI Classifiers (kategoriler ve filtreleme için)
+# Development Status: 3=Alpha, 4=Beta, 5=Production/Stable
+# Programming Language: Desteklenen Python versiyonları
+# Topic: Paket konuları
+classifiers = [
+    "Development Status :: 4 - Beta",  # Geliştirme durumu
+    "Intended Audience :: Developers",  # Hedef kitle
+    "License :: OSI Approved :: MIT License",  # Lisans bilgisi
+    "Programming Language :: Python :: 3",  # Python 3 desteği
+    "Programming Language :: Python :: 3.7",  # Python 3.7 desteği
+    "Programming Language :: Python :: 3.8",  # Python 3.8 desteği
+    "Programming Language :: Python :: 3.9",  # Python 3.9 desteği
+    "Programming Language :: Python :: 3.10",  # Python 3.10 desteği
+    "Programming Language :: Python :: 3.11",  # Python 3.11 desteği
+    "Programming Language :: Python :: 3.12",  # Python 3.12 desteği
+    "Topic :: Software Development :: Libraries :: Python Modules",  # Kütüphane kategorisi
+    "Topic :: System :: Logging",  # Logging kategorisi
+]
+
+# Zorunlu bağımlılıklar (paket kurulurken otomatik yüklenir)
+# Şu anda boş çünkü proje sadece Python standart kütüphanesini kullanıyor
+dependencies = []
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPSİYONEL BAĞIMLILIKLAR (Eklenebilir)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Örnekler ve geliştirme için opsiyonel bağımlılıklar
+# Kullanım: pip install microlog[examples] veya pip install microlog[dev]
+# 
+# [project.optional-dependencies]
+# examples = [
+#     "flask>=2.0.0",        # Web örnekleri için
+#     "fastapi>=0.100.0",   # FastAPI örnekleri için
+#     "uvicorn>=0.20.0",    # FastAPI server için
+#     "django>=4.0.0",      # Django örnekleri için
+#     "aiohttp>=3.8.0",     # Async web örnekleri için
+# ]
+# dev = [
+#     "pytest>=7.0.0",      # Test framework
+#     "pytest-cov>=4.0.0",  # Test coverage
+#     "black>=23.0.0",      # Code formatter
+#     "flake8>=6.0.0",      # Linter
+#     "mypy>=1.0.0",        # Type checker
+# ]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PROJE URL'LERİ
+# ═══════════════════════════════════════════════════════════════════════════════
+# PyPI'de görünecek proje linkleri
+[project.urls]
+Homepage = "https://github.com/vidinsight/microlog"  # Ana sayfa
+Documentation = "https://github.com/vidinsight/microlog"  # Dokümantasyon
+Repository = "https://github.com/vidinsight/microlog"  # Kaynak kod deposu
+Issues = "https://github.com/vidinsight/microlog/issues"  # Issue tracker
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SETUPTOOLS YAPILANDIRMASI
+# ═══════════════════════════════════════════════════════════════════════════════
+# Paket yapısı ve dosya konumları için setuptools özel ayarları
+[tool.setuptools]
+# Paket dizini eşlemesi: "" (root) -> "src" dizini
+# Bu sayede src/microlog/ dizinindeki paketler bulunur
+package-dir = {"" = "src"}
+
+# Paket bulma ayarları: src/ dizininde paketleri ara
+[tool.setuptools.packages.find]
+where = ["src"]  # Paketler src/ dizininde aranacak
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# EKLENEBİLECEK DİĞER ÖZELLİKLER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# CLI Komutları (Entry Points) - Eklenebilir
+# Terminal'den çalıştırılabilir komutlar oluşturmak için:
+# [project.scripts]
+# microlog = "microlog.cli:main"  # microlog komutu çalıştırılabilir hale gelir
+#
+# Kullanım: pip install . sonrası terminal'de "microlog" komutu çalışır
+
+# Ek Dosyalar (Package Data) - Eklenebilir
+# Python dosyaları dışındaki dosyaları pakete dahil etmek için:
+# [tool.setuptools.package-data]
+# microlog = ["data/*.json", "templates/*.html", "config/*.yaml"]
+#
+# Veya MANIFEST.in dosyası kullanılabilir
+
+# Entry Points (Plugin Sistemi) - Eklenebilir
+# Diğer paketlerin genişletebileceği noktalar:
+# [project.entry-points."microlog.formatters"]
+# custom = "myapp.formatters:CustomFormatter"
+#
+# [project.entry-points."microlog.handlers"]
+# custom = "myapp.handlers:CustomHandler"
