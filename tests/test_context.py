@@ -16,7 +16,7 @@ class TestTraceContext:
     """TraceContext sınıfı testleri"""
     
     def test_trace_context_creation(self):
-        """TraceContext oluşturma testi"""
+        """TraceContext otomatik trace_id ve span_id oluşturur"""
         ctx = TraceContext()
         
         assert ctx.trace_id is not None
@@ -27,7 +27,7 @@ class TestTraceContext:
         assert ctx.started_at is not None
     
     def test_trace_context_with_custom_values(self):
-        """Özel değerlerle TraceContext oluşturma"""
+        """TraceContext özel değerlerle oluşturulabilir"""
         ctx = TraceContext(
             trace_id="custom-trace-123",
             span_id="custom-span-456",
@@ -44,7 +44,7 @@ class TestTraceContext:
         assert ctx.extra["tenant_id"] == "acme"
     
     def test_child_span_creation(self):
-        """Child span oluşturma testi"""
+        """child_span() yeni span oluşturur ve parent ilişkisini kurar"""
         parent = TraceContext(trace_id="trace-123", span_id="span-456")
         child = parent.child_span()
         
@@ -54,7 +54,7 @@ class TestTraceContext:
         assert len(child.span_id) == 16
     
     def test_to_dict(self):
-        """to_dict() metodu testi"""
+        """to_dict() context'i dict formatına dönüştürür"""
         ctx = TraceContext(
             trace_id="trace-123",
             span_id="span-456",
@@ -69,7 +69,7 @@ class TestTraceContext:
         assert "parent_span_id" not in result  # None olduğu için eklenmez
     
     def test_to_dict_with_extra(self):
-        """to_dict() extra alanlarla testi"""
+        """to_dict() extra alanları da dict'e ekler"""
         ctx = TraceContext(
             trace_id="trace-123",
             extra={"user_id": "usr-123", "order_id": "ord-456"}
@@ -81,8 +81,8 @@ class TestTraceContext:
         assert result["user_id"] == "usr-123"
         assert result["order_id"] == "ord-456"
     
-    def test_headers(self):
-        """headers() metodu testi"""
+    def test_to_headers(self):
+        """to_headers() context'i HTTP header formatına dönüştürür"""
         ctx = TraceContext(
             trace_id="trace-123",
             span_id="span-456",
@@ -90,26 +90,26 @@ class TestTraceContext:
             session_id="session-abc"
         )
         
-        headers = ctx.headers()
+        headers = ctx.to_headers()
         
-        assert headers["X-Trace-ID"] == "trace-123"
-        assert headers["X-Span-ID"] == "span-456"
-        assert headers["X-Correlation-ID"] == "order-789"
-        assert headers["X-Session-ID"] == "session-abc"
+        assert headers["X-Trace-Id"] == "trace-123"
+        assert headers["X-Span-Id"] == "span-456"
+        assert headers["X-Correlation-Id"] == "order-789"
+        assert headers["X-Session-Id"] == "session-abc"
     
-    def test_headers_without_optional(self):
-        """headers() opsiyonel alanlar olmadan testi"""
+    def test_to_headers_without_optional(self):
+        """to_headers() sadece mevcut alanları header'a ekler"""
         ctx = TraceContext(trace_id="trace-123", span_id="span-456")
         
-        headers = ctx.headers()
+        headers = ctx.to_headers()
         
-        assert headers["X-Trace-ID"] == "trace-123"
-        assert headers["X-Span-ID"] == "span-456"
-        assert "X-Correlation-ID" not in headers
-        assert "X-Session-ID" not in headers
+        assert headers["X-Trace-Id"] == "trace-123"
+        assert headers["X-Span-Id"] == "span-456"
+        assert "X-Correlation-Id" not in headers
+        assert "X-Session-Id" not in headers
     
     def test_from_headers(self):
-        """from_headers() metodu testi"""
+        """from_headers() HTTP header'larından TraceContext oluşturur"""
         headers = {
             "X-Trace-ID": "trace-123",
             "X-Span-ID": "span-456",
@@ -126,7 +126,7 @@ class TestTraceContext:
         assert ctx.session_id == "session-abc"
     
     def test_from_headers_missing(self):
-        """from_headers() eksik header'larla testi"""
+        """from_headers() eksik header'larda otomatik ID'ler oluşturur"""
         headers = {}
         
         ctx = TraceContext.from_headers(headers)
@@ -140,7 +140,7 @@ class TestTraceContextManager:
     """trace context manager testleri"""
     
     def test_trace_context_manager_basic(self):
-        """Temel trace context manager testi"""
+        """trace() context manager context oluşturur ve temizler"""
         with trace() as ctx:
             assert ctx is not None
             assert ctx.trace_id is not None
@@ -156,7 +156,7 @@ class TestTraceContextManager:
         assert current is None
     
     def test_trace_context_manager_with_params(self):
-        """Parametrelerle trace context manager testi"""
+        """trace() parametrelerle özel context oluşturur"""
         with trace(
             trace_id="custom-trace",
             correlation_id="order-123",
@@ -167,7 +167,7 @@ class TestTraceContextManager:
             assert ctx.extra["user_id"] == "usr-456"
     
     def test_trace_context_manager_nested(self):
-        """İç içe trace context manager testi"""
+        """trace() iç içe kullanımda parent-child ilişkisi kurar"""
         with trace(trace_id="parent-trace") as parent:
             parent_span_id = parent.span_id
             assert get_current_context().trace_id == "parent-trace"
@@ -183,7 +183,7 @@ class TestTraceContextManager:
             assert get_current_context().span_id == parent_span_id
     
     def test_trace_context_manager_from_headers(self):
-        """Header'lardan trace context oluşturma testi"""
+        """trace() HTTP header'larından context oluşturur"""
         headers = {
             "X-Trace-ID": "trace-123",
             "X-Span-ID": "span-456",
@@ -200,12 +200,12 @@ class TestContextFunctions:
     """Context yardımcı fonksiyon testleri"""
     
     def test_get_current_context_none(self):
-        """get_current_context() context yokken testi"""
+        """get_current_context() context yokken None döner"""
         set_current_context(None)
         assert get_current_context() is None
     
     def test_set_get_current_context(self):
-        """set_current_context() ve get_current_context() testi"""
+        """set_current_context() ve get_current_context() birlikte çalışır"""
         ctx = TraceContext(trace_id="test-trace")
         
         set_current_context(ctx)
@@ -215,7 +215,7 @@ class TestContextFunctions:
         assert get_current_context() is None
     
     def test_create_trace(self):
-        """create_trace() fonksiyonu testi"""
+        """create_trace() yeni TraceContext oluşturur"""
         ctx = create_trace(
             trace_id="trace-123",
             correlation_id="order-456"
@@ -224,4 +224,3 @@ class TestContextFunctions:
         assert ctx.trace_id == "trace-123"
         assert ctx.correlation_id == "order-456"
         assert isinstance(ctx, TraceContext)
-

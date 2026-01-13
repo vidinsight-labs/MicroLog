@@ -8,9 +8,10 @@ import time
 import logging
 from pathlib import Path
 from microlog import (
-    get_logger,
     trace,
     setup_file_logger,
+)
+from microlog.handlers import (
     AsyncRotatingFileHandler,
     AsyncConsoleHandler,
 )
@@ -69,7 +70,7 @@ class TestContextThreadSafety:
             assert result["user_id"] == f"user-{thread_id}"
     
     def test_context_concurrent_access(self):
-        """Context'e eşzamanlı erişim testi"""
+        """Context'e eşzamanlı erişim thread-safe çalışır"""
         errors = []
         iterations = 100
         
@@ -245,61 +246,10 @@ class TestHandlerThreadSafety:
         handler.stop()
         handler.handler.close()
     
-    def test_smtp_handler_rate_limiting_thread_safety(self):
-        """SMTP handler rate limiting thread-safety"""
-        from microlog.handlers import AsyncSMTPHandler
-        
-        handler = AsyncSMTPHandler(
-            mailhost=("smtp.example.com", 587),
-            fromaddr="test@example.com",
-            toaddrs=["admin@example.com"],
-            subject="Test",
-            rate_limit=1  # 1 saniye
-        )
-        
-        # Aynı mesajı farklı thread'lerden gönderme denemesi
-        record = logging.LogRecord(
-            name="test",
-            level=logging.ERROR,
-            pathname="test.py",
-            lineno=1,
-            msg="Test error",
-            args=(),
-            exc_info=None
-        )
-        
-        results = []
-        errors = []
-        
-        def worker(thread_id: int):
-            try:
-                # Rate limiting kontrolü thread-safe olmalı
-                should_send = handler.handler._should_send(record)
-                results.append((thread_id, should_send))
-            except Exception as e:
-                errors.append(f"Thread {thread_id}: {e}")
-        
-        threads = []
-        for i in range(10):
-            t = threading.Thread(target=worker, args=(i,))
-            threads.append(t)
-            t.start()
-        
-        for t in threads:
-            t.join()
-        
-        assert len(errors) == 0, f"Errors: {errors}"
-        
-        # İlk thread True dönmeli, diğerleri False (rate limit nedeniyle)
-        # Ancak thread'ler eşzamanlı çalıştığı için birden fazla True olabilir
-        true_count = sum(1 for _, should_send in results if should_send)
-        assert true_count >= 1, "En az bir thread True döndürmeli"
-        
-        handler.stop()
 
 
 class TestConcurrentTraceAndLogging:
-    """Trace context ve logging'in birlikte thread-safety testi"""
+    """Trace context ve logging birlikte thread-safe çalışır"""
     
     def test_trace_context_with_concurrent_logging(self, clean_loggers):
         """Trace context ile eşzamanlı logging"""
@@ -421,4 +371,3 @@ class TestStressTest:
         
         handler.stop()
         handler.handler.close()
-

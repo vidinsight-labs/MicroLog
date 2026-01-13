@@ -385,4 +385,3 @@ class TestThreadCleanup:
         
         # En fazla 2 thread artışı tolere et
         assert thread_increase <= 2, f"Thread leak detected: {thread_increase} threads leaked"
-

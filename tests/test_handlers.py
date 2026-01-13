@@ -9,7 +9,6 @@ from pathlib import Path
 from microlog.handlers import (
     AsyncConsoleHandler,
     AsyncRotatingFileHandler,
-    AsyncSMTPHandler,
 )
 
 
@@ -17,7 +16,7 @@ class TestAsyncConsoleHandler:
     """AsyncConsoleHandler testleri"""
     
     def test_async_console_handler_creation(self):
-        """AsyncConsoleHandler oluşturma testi"""
+        """AsyncConsoleHandler başarıyla oluşturulur"""
         handler = AsyncConsoleHandler()
         
         assert handler is not None
@@ -25,7 +24,7 @@ class TestAsyncConsoleHandler:
         assert handler._started is False
     
     def test_async_console_handler_start(self):
-        """AsyncConsoleHandler başlatma testi"""
+        """start() metodu handler'ı başlatır ve listener oluşturur"""
         handler = AsyncConsoleHandler()
         handler.start()
         
@@ -35,7 +34,7 @@ class TestAsyncConsoleHandler:
         handler.stop()
     
     def test_async_console_handler_get_queue_handler(self):
-        """QueueHandler alma testi"""
+        """get_queue_handler() QueueHandler döndürür ve handler'ı otomatik başlatır"""
         handler = AsyncConsoleHandler()
         queue_handler = handler.get_queue_handler()
         
@@ -45,7 +44,7 @@ class TestAsyncConsoleHandler:
         handler.stop()
     
     def test_async_console_handler_with_level(self):
-        """Seviye ile AsyncConsoleHandler testi"""
+        """AsyncConsoleHandler level parametresi ile çalışır"""
         handler = AsyncConsoleHandler(level=logging.WARNING)
         
         assert handler.handler.level == logging.WARNING
@@ -57,7 +56,7 @@ class TestAsyncRotatingFileHandler:
     """AsyncRotatingFileHandler testleri"""
     
     def test_async_rotating_file_handler_creation(self, temp_log_file):
-        """AsyncRotatingFileHandler oluşturma testi"""
+        """AsyncRotatingFileHandler başarıyla oluşturulur ve dosya açılır"""
         handler = AsyncRotatingFileHandler(
             filename=temp_log_file,
             max_bytes=1024,
@@ -73,7 +72,7 @@ class TestAsyncRotatingFileHandler:
         handler.handler.close()
     
     def test_async_rotating_file_handler_logging(self, temp_log_file):
-        """Dosyaya log yazma testi"""
+        """AsyncRotatingFileHandler logları dosyaya yazar"""
         handler = AsyncRotatingFileHandler(filename=temp_log_file)
         queue_handler = handler.get_queue_handler()
         
@@ -95,7 +94,7 @@ class TestAsyncRotatingFileHandler:
         handler.handler.close()
     
     def test_async_rotating_file_handler_rotation(self, temp_dir):
-        """Dosya rotation testi"""
+        """AsyncRotatingFileHandler dosya boyutu limiti aşıldığında rotation yapar"""
         log_file = temp_dir / "rotate_test.log"
         handler = AsyncRotatingFileHandler(
             filename=str(log_file),
@@ -123,64 +122,4 @@ class TestAsyncRotatingFileHandler:
         handler.stop()
         handler.handler.close()
 
-
-class TestAsyncSMTPHandler:
-    """AsyncSMTPHandler testleri"""
-    
-    def test_async_smtp_handler_creation(self):
-        """AsyncSMTPHandler oluşturma testi"""
-        handler = AsyncSMTPHandler(
-            mailhost=("smtp.example.com", 587),
-            fromaddr="test@example.com",
-            toaddrs=["admin@example.com"],
-            subject="Test Alert",
-            level=logging.ERROR
-        )
-        
-        assert handler.handler.level == logging.ERROR
-        assert handler.handler.mailhost == ("smtp.example.com", 587)
-        assert handler.handler.fromaddr == "test@example.com"
-        
-        handler.stop()
-    
-    def test_async_smtp_handler_rate_limiting(self):
-        """Rate limiting testi"""
-        handler = AsyncSMTPHandler(
-            mailhost=("smtp.example.com", 587),
-            fromaddr="test@example.com",
-            toaddrs=["admin@example.com"],
-            subject="Test Alert",
-            rate_limit=60
-        )
-        
-        record1 = logging.LogRecord(
-            name="test",
-            level=logging.ERROR,
-            pathname="test.py",
-            lineno=1,
-            msg="Error 1",
-            args=(),
-            exc_info=None
-        )
-        
-        record2 = logging.LogRecord(
-            name="test",
-            level=logging.ERROR,
-            pathname="test.py",
-            lineno=1,
-            msg="Error 1",  # Aynı mesaj
-            args=(),
-            exc_info=None
-        )
-        
-        # İlk kayıt gönderilmeli
-        should_send_1 = handler.handler._should_send(record1)
-        assert should_send_1 is True
-        
-        # İkinci kayıt (çok kısa sürede) gönderilmemeli
-        should_send_2 = handler.handler._should_send(record2)
-        # Rate limit aktif olduğu için False olmalı (eğer aynı key ise)
-        # Not: Bu test gerçek SMTP gönderimi yapmaz, sadece rate limiting mantığını test eder
-        
-        handler.stop()
 

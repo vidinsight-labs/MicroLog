@@ -1,26 +1,16 @@
-"""
-core.py — Ana Logger Yapılandırması
-
-Bu modül ne yapar?
-- Logger oluşturma ve yapılandırma
-- Handler ve formatter kurulumu
-- Trace context entegrasyonu
-- Kolay kullanım için yardımcı fonksiyonlar
-"""
-
 from __future__ import annotations
 
 import logging
-import sys
-from typing import Optional, List, Dict, Any
-from logging import Logger
+from dataclasses import dataclass
+from typing import Optional, List, Union, Dict, Any
+from logging.handlers import QueueHandler
 
 from .handlers import (
+    AsyncHandler,
     AsyncConsoleHandler,
     AsyncRotatingFileHandler,
-    AsyncSMTPHandler
 )
-from .formatter import (
+from .formatters import (
     JSONFormatter,
     PrettyFormatter,
     CompactFormatter
@@ -28,9 +18,6 @@ from .formatter import (
 from .context import get_current_context, TraceContext
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TRACE CONTEXT FILTER
-# ═══════════════════════════════════════════════════════════════════════════════
 
 class TraceContextFilter(logging.Filter):
     """
@@ -42,134 +29,182 @@ class TraceContextFilter(logging.Filter):
     
     def filter(self, record: logging.LogRecord) -> bool:
         """Log kaydını filtreler ve trace bilgilerini ekler."""
-        ctx = get_current_context()
-        
-        if ctx:
-            trace_data = ctx.to_dict()
-            for key, value in trace_data.items():
-                setattr(record, key, value)
+        try:
+            ctx = get_current_context()
+            
+            if ctx:
+                trace_data = ctx.to_dict()
+                for key, value in trace_data.items():
+                    setattr(record, key, value)
+        except Exception:
+            # Context alınamazsa log yazma işlemini engelleme
+            # Sadece trace bilgisi eklenmez
+            pass
         
         return True
+    
 
+@dataclass
+class HandlerConfig:
+    """Handler + Formatter eşleştirmesi."""
+    handler: Union[AsyncHandler, logging.Handler]
+    formatter: Optional[logging.Formatter] = None
+    level: Optional[int] = None
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# LOGGER CONFIGURATION
-# ═══════════════════════════════════════════════════════════════════════════════
 
 def setup_logger(
     name: str = "root",
     level: int = logging.INFO,
     service_name: Optional[str] = None,
-    handlers: Optional[List[logging.Handler]] = None,
-    formatter: Optional[logging.Formatter] = None,
-    add_trace_filter: bool = True
-) -> Logger:
+    handlers: Optional[List[HandlerConfig]] = None,
+    add_trace_filter: bool = True,
+    return_handlers: bool = False
+) -> Union[logging.Logger, tuple[logging.Logger, List[AsyncHandler]]]:
     """
-    Logger oluşturur ve yapılandırır.
+    Logger oluşturur.
     
     Args:
-        name:            Logger adı
-        level:           Log seviyesi
-        service_name:    Servis adı (formatter'lara geçilir)
-        handlers:        Handler listesi (default: console handler)
-        formatter:       Formatter (default: PrettyFormatter)
-        add_trace_filter: Trace context filter ekle
+        name:         Logger adı
+        level:        Log seviyesi
+        service_name: Servis adı (default: name)
+        handlers:     HandlerConfig listesi
+        add_trace_filter: Trace filter ekle
+        return_handlers: Handler'ları da döndür mü? (default: False)
+                        True ise (logger, handlers) tuple döner
     
     Returns:
-        Yapılandırılmış Logger instance
+        Logger veya (Logger, List[AsyncHandler]) tuple
     
     Kullanım:
-        logger = setup_logger(
-            name="myapp",
-            level=logging.DEBUG,
-            service_name="order-service"
-        )
+        # Basit - default console handler (geriye uyumlu)
+        logger = setup_logger("myapp")
+        
+        # Servis adıyla
+        logger = setup_logger("myapp", service_name="order-service")
+        
+        # Handler'ları da al (yeni özellik)
+        logger, handlers = setup_logger("myapp", return_handlers=True)
+        
+        # Program sonunda (opsiyonel - atexit zaten var)
+        for handler in handlers:
+            handler.stop()
+        
+        # Farklı formatter'larla
+        logger = setup_logger("myapp", handlers=[
+            HandlerConfig(AsyncConsoleHandler(), PrettyFormatter()),
+            HandlerConfig(AsyncRotatingFileHandler("app.log"), JSONFormatter()),
+        ])
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    
-    # Mevcut handler'ları temizle (tekrar kurulum için)
     logger.handlers.clear()
+    logger.propagate = False
     
-    # Handler'lar yoksa default console handler ekle
+    # Effective service name
+    svc = service_name or name
+    
+    # Default handler
     if not handlers:
-        console_handler = AsyncConsoleHandler(level=level)
-        if formatter:
-            console_handler.handler.setFormatter(formatter)
-        else:
-            # Default formatter
-            fmt = PrettyFormatter(service_name=service_name or name)
-            console_handler.handler.setFormatter(fmt)
+        handlers = [
+            HandlerConfig(
+                handler=AsyncConsoleHandler(level=level),
+                formatter=PrettyFormatter(service_name=svc)
+            )
+        ]
+    
+    # Handler'ları ekle ve topla
+    created_handlers: List[AsyncHandler] = []
+    
+    for config in handlers:
+        handler = config.handler
+        formatter = config.formatter or PrettyFormatter(service_name=svc)
+        handler_level = config.level or level
         
-        handlers = [console_handler.get_queue_handler()]
+        if isinstance(handler, AsyncHandler):
+            handler.handler.setFormatter(formatter)
+            handler.handler.setLevel(handler_level)
+            logger.addHandler(handler.get_queue_handler())
+            created_handlers.append(handler)  # Handler'ı kaydet
+        else:
+            handler.setFormatter(formatter)
+            handler.setLevel(handler_level)
+            logger.addHandler(handler)
     
-    # Handler'ları ekle
-    for handler in handlers:
-        logger.addHandler(handler)
-    
-    # Trace context filter ekle
     if add_trace_filter:
-        trace_filter = TraceContextFilter()
-        logger.addFilter(trace_filter)
+        # Duplicate filter kontrolü
+        has_trace_filter = any(isinstance(f, TraceContextFilter) for f in logger.filters)
+        if not has_trace_filter:
+            logger.addFilter(TraceContextFilter())
     
-    return logger
+    # Return type'a göre döndür
+    if return_handlers:
+        return logger, created_handlers
+    else:
+        return logger
 
 
 def configure_logger(
-    logger: Logger,
+    logger: logging.Logger,
     level: Optional[int] = None,
     service_name: Optional[str] = None,
-    handlers: Optional[List[logging.Handler]] = None,
-    formatter: Optional[logging.Formatter] = None,
+    handlers: Optional[List[HandlerConfig]] = None,
     add_trace_filter: bool = True
-) -> Logger:
+) -> logging.Logger:
     """
     Mevcut logger'ı yapılandırır.
     
     Args:
-        logger:          Yapılandırılacak logger
-        level:           Log seviyesi
-        service_name:    Servis adı
-        handlers:        Handler listesi
-        formatter:       Formatter
-        add_trace_filter: Trace context filter ekle
+        logger:       Yapılandırılacak logger
+        level:        Log seviyesi (None = değiştirme)
+        service_name: Servis adı (default: logger.name)
+        handlers:     HandlerConfig listesi (None = mevcut handler'ları koru)
+        add_trace_filter: Trace filter ekle
     
-    Returns:
-        Yapılandırılmış Logger instance
+    Kullanım:
+        logger = logging.getLogger("myapp")
+        configure_logger(logger, level=logging.DEBUG, service_name="order-api", handlers=[
+            HandlerConfig(AsyncConsoleHandler(), JSONFormatter())
+        ])
     """
+    # Effective service name
+    svc = service_name or logger.name
+    
     if level is not None:
         logger.setLevel(level)
     
     if handlers:
         logger.handlers.clear()
-        for handler in handlers:
-            logger.addHandler(handler)
-    
-    if formatter:
-        for handler in logger.handlers:
-            handler.setFormatter(formatter)
+        
+        for config in handlers:
+            handler = config.handler
+            formatter = config.formatter or PrettyFormatter(service_name=svc)
+            # logger.level NOTSET olabilir, effective level kullan
+            handler_level = config.level or logger.getEffectiveLevel()
+            
+            if isinstance(handler, AsyncHandler):
+                handler.handler.setFormatter(formatter)
+                handler.handler.setLevel(handler_level)
+                logger.addHandler(handler.get_queue_handler())
+            else:
+                handler.setFormatter(formatter)
+                handler.setLevel(handler_level)
+                logger.addHandler(handler)
     
     if add_trace_filter:
-        # Mevcut filter'ları kontrol et
-        has_trace_filter = any(
-            isinstance(f, TraceContextFilter) for f in logger.filters
-        )
+        has_trace_filter = any(isinstance(f, TraceContextFilter) for f in logger.filters)
         if not has_trace_filter:
             logger.addFilter(TraceContextFilter())
     
     return logger
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# QUICK SETUP FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def setup_console_logger(
     name: str = "root",
     level: int = logging.INFO,
     service_name: Optional[str] = None,
-    use_colors: bool = True
-) -> Logger:
+    use_colors: bool = True,
+    return_handlers: bool = False
+) -> Union[logging.Logger, tuple[logging.Logger, List[AsyncHandler]]]:
     """
     Sadece console handler ile logger kurar.
     
@@ -178,23 +213,26 @@ def setup_console_logger(
         level:        Log seviyesi
         service_name: Servis adı
         use_colors:   Renkli çıktı kullan
+        return_handlers: Handler'ları da döndür mü? (default: False)
     
-    Returns:
-        Logger instance
+    Kullanım:
+        logger = setup_console_logger("myapp", use_colors=True)
+        logger, handlers = setup_console_logger("myapp", return_handlers=True)
     """
-    handler = AsyncConsoleHandler(level=level)
-    formatter = PrettyFormatter(
-        service_name=service_name or name,
-        use_colors=use_colors
-    )
-    handler.handler.setFormatter(formatter)
     
     return setup_logger(
         name=name,
         level=level,
-        service_name=service_name,
-        handlers=[handler.get_queue_handler()],
-        formatter=formatter
+        handlers=[
+            HandlerConfig(
+                handler=AsyncConsoleHandler(level=level),
+                formatter=PrettyFormatter(
+                    service_name=service_name or name,
+                    use_colors=use_colors
+                )
+            )
+        ],
+        return_handlers=return_handlers
     )
 
 
@@ -203,11 +241,12 @@ def setup_file_logger(
     level: int = logging.INFO,
     service_name: Optional[str] = None,
     filename: str = "app.log",
-    max_bytes: int = 10 * 1024 * 1024,  # 10MB
+    max_bytes: int = 10 * 1024 * 1024,
     backup_count: int = 5,
     compress: bool = True,
-    format_type: str = "json"  # "json", "compact", "pretty"
-) -> Logger:
+    format_type: str = "json",
+    return_handlers: bool = False
+) -> Union[logging.Logger, tuple[logging.Logger, List[AsyncHandler]]]:
     """
     Sadece file handler ile logger kurar.
     
@@ -216,130 +255,46 @@ def setup_file_logger(
         level:        Log seviyesi
         service_name: Servis adı
         filename:     Log dosyası yolu
-        max_bytes:    Maksimum dosya boyutu
+        max_bytes:    Maksimum dosya boyutu (default: 10MB)
         backup_count: Backup dosya sayısı
         compress:     Sıkıştırma kullan
-        format_type:  Format tipi ("json", "compact", "pretty")
-    
-    Returns:
-        Logger instance
-    """
-    handler = AsyncRotatingFileHandler(
-        filename=filename,
-        max_bytes=max_bytes,
-        backup_count=backup_count,
-        compress=compress
-    )
-    handler.get_queue_handler().setLevel(level)
-    
-    if format_type == "json":
-        formatter = JSONFormatter(service_name=service_name or name)
-    elif format_type == "compact":
-        formatter = CompactFormatter(service_name=service_name or name)
-    else:
-        formatter = PrettyFormatter(service_name=service_name or name, use_colors=False)
-    
-    handler.handler.setFormatter(formatter)
-    
-    return setup_logger(
-        name=name,
-        level=level,
-        service_name=service_name,
-        handlers=[handler.get_queue_handler()],
-        formatter=formatter
-    )
-
-
-def setup_production_logger(
-    name: str = "root",
-    level: int = logging.INFO,
-    service_name: Optional[str] = None,
-    console: bool = True,
-    file_path: Optional[str] = None,
-    json_format: bool = True
-) -> Logger:
-    """
-    Production ortamı için logger kurar (console + file).
-    
-    Args:
-        name:         Logger adı
-        level:        Log seviyesi
-        service_name: Servis adı
-        console:      Console handler ekle
-        file_path:    File handler için dosya yolu
-        json_format:  JSON format kullan (file için)
-    
-    Returns:
-        Logger instance
-    """
-    handlers = []
-    
-    # Console handler
-    if console:
-        console_handler = AsyncConsoleHandler(level=level)
-        console_formatter = CompactFormatter(service_name=service_name or name)
-        console_handler.handler.setFormatter(console_formatter)
-        handlers.append(console_handler.get_queue_handler())
-    
-    # File handler
-    if file_path:
-        file_handler = AsyncRotatingFileHandler(
-            filename=file_path,
-            level=level
-        )
-        if json_format:
-            file_formatter = JSONFormatter(service_name=service_name or name)
-        else:
-            file_formatter = CompactFormatter(service_name=service_name or name)
-        file_handler.handler.setFormatter(file_formatter)
-        handlers.append(file_handler.get_queue_handler())
-    
-    return setup_logger(
-        name=name,
-        level=level,
-        service_name=service_name,
-        handlers=handlers
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# GET LOGGER HELPER
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def get_logger(
-    name: Optional[str] = None,
-    service_name: Optional[str] = None
-) -> Logger:
-    """
-    Logger alır veya oluşturur.
-    
-    Args:
-        name:         Logger adı (default: çağıran modülün adı)
-        service_name: Servis adı
-    
-    Returns:
-        Logger instance
+        format_type:  "json", "compact", veya "pretty"
+        return_handlers: Handler'ları da döndür mü? (default: False)
     
     Kullanım:
-        logger = get_logger(service_name="order-service")
-        logger.info("Order processed")
+        logger = setup_file_logger("myapp", filename="app.log", format_type="json")
+        logger, handlers = setup_file_logger("myapp", return_handlers=True)
     """
-    if name is None:
-        import inspect
-        frame = inspect.currentframe()
-        if frame and frame.f_back:
-            name = frame.f_back.f_globals.get('__name__', 'root')
-        else:
-            name = 'root'
     
-    logger = logging.getLogger(name)
-    
-    # Eğer handler yoksa, default console handler ekle
-    if not logger.handlers:
-        setup_console_logger(
-            name=name,
-            service_name=service_name or name
+    # Formatter seç
+    svc = service_name or name
+    if format_type == "json":
+        formatter = JSONFormatter(service_name=svc)
+    elif format_type == "compact":
+        formatter = CompactFormatter(service_name=svc)
+    elif format_type == "pretty":
+        formatter = PrettyFormatter(service_name=svc, use_colors=False)
+    else:
+        valid_formats = ["json", "compact", "pretty"]
+        raise ValueError(
+            f"Geçersiz format_type: '{format_type}'. "
+            f"Geçerli değerler: {', '.join(valid_formats)}"
         )
-        logger = logging.getLogger(name)
     
-    return logger
+    return setup_logger(
+        name=name,
+        level=level,
+        handlers=[
+            HandlerConfig(
+                handler=AsyncRotatingFileHandler(
+                    filename=filename,
+                    max_bytes=max_bytes,
+                    backup_count=backup_count,
+                    compress=compress,
+                    level=level
+                ),
+                formatter=formatter
+            )
+        ],
+        return_handlers=return_handlers
+    )

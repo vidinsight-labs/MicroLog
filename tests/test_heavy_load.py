@@ -29,19 +29,20 @@ from typing import List
 import pytest
 
 from microlog import (
+    trace,
+)
+from microlog.handlers import (
     AsyncRotatingFileHandler,
     AsyncConsoleHandler,
-    setup_logger,
-    trace,
-    log_function
 )
+from microlog.core import setup_logger
 
 
 class TestExtremeConcurrency:
     """Aşırı yüksek eşzamanlılık testleri"""
     
     def test_100_threads_1000_logs(self, temp_log_file):
-        """100 thread × 1000 log = 100,000 log"""
+        """100 thread ile 1000'er log yazma (toplam 100,000 log)"""
         handler = AsyncRotatingFileHandler(filename=temp_log_file)
         queue_handler = handler.get_queue_handler()
         
@@ -95,7 +96,7 @@ class TestExtremeConcurrency:
         print(f"   Throughput: {throughput:,.0f} logs/sec")
     
     def test_500_threads_100_logs(self, temp_log_file):
-        """500 thread × 100 log = 50,000 log"""
+        """500 thread ile 100'er log yazma (toplam 50,000 log)"""
         handler = AsyncRotatingFileHandler(filename=temp_log_file)
         queue_handler = handler.get_queue_handler()
         
@@ -151,7 +152,7 @@ class TestSustainedLoad:
     """Uzun süreli dayanıklılık testleri"""
     
     def test_sustained_logging_10_seconds(self, temp_log_file):
-        """10 saniye sürekli logging (1 dakika çok uzun, test süresini kısalttık)"""
+        """10 saniye sürekli logging ile dayanıklılık test edilir"""
         handler = AsyncRotatingFileHandler(filename=temp_log_file)
         queue_handler = handler.get_queue_handler()
         
@@ -211,7 +212,7 @@ class TestSustainedLoad:
         print(f"   Throughput: {throughput:,.0f} logs/sec")
     
     def test_sustained_logging_with_trace_context(self, temp_log_file):
-        """Trace context ile uzun süreli logging"""
+        """Trace context ile uzun süreli logging dayanıklılık test edilir"""
         handler = AsyncRotatingFileHandler(filename=temp_log_file)
         queue_handler = handler.get_queue_handler()
         
@@ -271,7 +272,7 @@ class TestMemoryStability:
     """Memory stability testleri"""
     
     def test_memory_growth_under_load(self, temp_log_file):
-        """Yük altında memory artışı kontrollü olmalı"""
+        """Yük altında memory artışı kontrollü kalır"""
         import psutil
         import os
         
@@ -309,7 +310,7 @@ class TestMemoryStability:
         print(f"\n✅ Memory: {initial_memory:.1f} MB → {final_memory:.1f} MB (+{memory_increase:.1f} MB)")
     
     def test_no_memory_leak_repeated_operations(self, temp_dir):
-        """Tekrarlı işlemlerde memory leak olmamalı"""
+        """Tekrarlı işlemlerde memory leak oluşmaz"""
         import psutil
         import os
         
@@ -360,7 +361,7 @@ class TestQueueBehavior:
     """Queue davranış testleri"""
     
     def test_queue_handles_burst_load(self, temp_log_file):
-        """Ani yük artışı queue tarafından yönetilir"""
+        """Queue ani yük artışını başarıyla yönetir"""
         handler = AsyncRotatingFileHandler(filename=temp_log_file)
         queue_handler = handler.get_queue_handler()
         
@@ -390,7 +391,7 @@ class TestQueueBehavior:
         print(f"\n✅ Burst: 10,000 logs queued in {burst_duration*1000:.1f}ms")
     
     def test_queue_size_monitoring(self, temp_log_file):
-        """Queue boyutu monitör edilebilir"""
+        """Queue boyutu monitör edilebilir ve kontrol edilebilir"""
         handler = AsyncRotatingFileHandler(filename=temp_log_file)
         queue_handler = handler.get_queue_handler()
         
@@ -421,7 +422,7 @@ class TestRotationUnderLoad:
     """Yük altında rotation testleri"""
     
     def test_rotation_during_heavy_load(self, temp_dir):
-        """Yoğun yük altında rotation düzgün çalışmalı"""
+        """Yoğun yük altında rotation düzgün çalışır"""
         temp_file = temp_dir / "rotation_load.log"
         
         handler = AsyncRotatingFileHandler(
@@ -505,59 +506,4 @@ class TestRotationUnderLoad:
         
         print(f"\n✅ Rotation under load: {len(files)} files, {total_lines:,} logs ({total_lines*100/expected_total:.1f}% success rate)")
 
-
-class TestDecoratorPerformance:
-    """Decorator performans testleri"""
-    
-    def test_log_function_decorator_overhead(self, temp_log_file):
-        """@log_function decorator'ın performans etkisi minimal olmalı"""
-        handler = AsyncRotatingFileHandler(filename=temp_log_file)
-        queue_handler = handler.get_queue_handler()
-        
-        logger = logging.getLogger("test_decorator_perf")
-        logger.addHandler(queue_handler)
-        logger.setLevel(logging.INFO)
-        
-        # Decorator'lı fonksiyon
-        @log_function(logger=logger)
-        def decorated_func(x: int) -> int:
-            return x * 2
-        
-        # Decorator'sız fonksiyon
-        def plain_func(x: int) -> int:
-            return x * 2
-        
-        # Warm-up
-        for i in range(100):
-            decorated_func(i)
-            plain_func(i)
-        
-        # Benchmark decorated
-        start = time.time()
-        for i in range(1000):
-            decorated_func(i)
-        decorated_time = time.time() - start
-        
-        # Benchmark plain
-        start = time.time()
-        for i in range(1000):
-            plain_func(i)
-        plain_time = time.time() - start
-        
-        handler.stop()
-        
-        # Overhead hesapla
-        overhead = decorated_time - plain_time
-        overhead_percent = (overhead / plain_time) * 100 if plain_time > 0 else 0
-        
-        # Logging overhead'i yüksek olabilir (asenkron olsa bile)
-        # Önemli olan: crash olmaması ve fonksiyonun çalışması
-        print(f"\n✅ Decorator overhead:")
-        print(f"   Plain: {plain_time*1000:.2f}ms")
-        print(f"   Decorated: {decorated_time*1000:.2f}ms")
-        print(f"   Overhead: {overhead*1000:.2f}ms ({overhead_percent:.1f}%)")
-        
-        # Decorator çalışıyor ve crash olmuyor - test başarılı
-        assert decorated_time > 0, "Decorator should execute"
-        assert plain_time > 0, "Plain function should execute"
 

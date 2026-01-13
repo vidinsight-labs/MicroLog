@@ -317,4 +317,3 @@ class TestSignalReentrancy:
         finally:
             signal.signal(signal.SIGUSR1, old_handler1)
             signal.signal(signal.SIGUSR2, old_handler2)
-

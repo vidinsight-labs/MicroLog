@@ -9,9 +9,8 @@ from microlog.core import (
     configure_logger,
     setup_console_logger,
     setup_file_logger,
-    setup_production_logger,
-    get_logger,
     TraceContextFilter,
+    HandlerConfig,
 )
 
 
@@ -19,7 +18,7 @@ class TestSetupLogger:
     """setup_logger testleri"""
     
     def test_setup_logger_basic(self, clean_loggers):
-        """Temel setup_logger testi"""
+        """setup_logger temel kullanımını doğrular"""
         logger = setup_logger(name="test_logger", level=logging.DEBUG)
         
         assert logger.name == "test_logger"
@@ -27,7 +26,7 @@ class TestSetupLogger:
         assert len(logger.handlers) > 0
     
     def test_setup_logger_with_service_name(self, clean_loggers):
-        """Service name ile setup_logger testi"""
+        """setup_logger service_name parametresi ile çalışır"""
         logger = setup_logger(
             name="test_service",
             service_name="order-service",
@@ -38,26 +37,54 @@ class TestSetupLogger:
         assert len(logger.handlers) > 0
     
     def test_setup_logger_with_custom_handler(self, clean_loggers):
-        """Özel handler ile setup_logger testi"""
+        """setup_logger özel handler ve formatter ile çalışır"""
         from microlog.handlers import AsyncConsoleHandler
+        from microlog.formatters import PrettyFormatter
         
         handler = AsyncConsoleHandler()
-        queue_handler = handler.get_queue_handler()
         
         logger = setup_logger(
             name="test_custom",
-            handlers=[queue_handler]
+            handlers=[
+                HandlerConfig(
+                    handler=handler,
+                    formatter=PrettyFormatter(service_name="test")
+                )
+            ]
         )
         
         assert len(logger.handlers) == 1
         handler.stop()
+
+    def test_setup_logger_return_handlers(self, clean_loggers):
+        """setup_logger return_handlers=True ile handler'ları döndürür"""
+        logger, handlers = setup_logger(
+            name="test_return_handlers",
+            return_handlers=True
+        )
+        
+        assert logger.name == "test_return_handlers"
+        assert isinstance(handlers, list)
+        assert len(handlers) > 0
+        assert all(hasattr(h, 'stop') for h in handlers)
+        
+        # Handler'ları temizle
+        for handler in handlers:
+            handler.stop()
+    
+    def test_setup_logger_backward_compatibility(self, clean_loggers):
+        """setup_logger geriye uyumlu - return_handlers=False varsayılan"""
+        logger = setup_logger(name="test_backward")
+        
+        assert isinstance(logger, logging.Logger)
+        assert logger.name == "test_backward"
 
 
 class TestSetupConsoleLogger:
     """setup_console_logger testleri"""
     
     def test_setup_console_logger_basic(self, clean_loggers):
-        """Temel setup_console_logger testi"""
+        """setup_console_logger temel kullanımını doğrular"""
         logger = setup_console_logger(
             name="test_console",
             level=logging.INFO
@@ -68,20 +95,34 @@ class TestSetupConsoleLogger:
         assert len(logger.handlers) > 0
     
     def test_setup_console_logger_with_colors(self, clean_loggers):
-        """Renkli çıktı ile setup_console_logger testi"""
+        """setup_console_logger renkli çıktı desteğini doğrular"""
         logger = setup_console_logger(
             name="test_colors",
             use_colors=True
         )
         
         assert len(logger.handlers) > 0
+    
+    def test_setup_console_logger_return_handlers(self, clean_loggers):
+        """setup_console_logger return_handlers=True ile handler'ları döndürür"""
+        logger, handlers = setup_console_logger(
+            name="test_console_handlers",
+            return_handlers=True
+        )
+        
+        assert logger.name == "test_console_handlers"
+        assert isinstance(handlers, list)
+        assert len(handlers) == 1
+        
+        # Handler'ı temizle
+        handlers[0].stop()
 
 
 class TestSetupFileLogger:
     """setup_file_logger testleri"""
     
     def test_setup_file_logger_basic(self, clean_loggers, temp_log_file):
-        """Temel setup_file_logger testi"""
+        """setup_file_logger temel kullanımını doğrular"""
         logger = setup_file_logger(
             name="test_file",
             filename=temp_log_file,
@@ -99,7 +140,7 @@ class TestSetupFileLogger:
                 handler.stop()
     
     def test_setup_file_logger_formats(self, clean_loggers, temp_log_file):
-        """Farklı formatlar ile setup_file_logger testi"""
+        """setup_file_logger tüm format tiplerini destekler (json, compact, pretty)"""
         for fmt_type in ["json", "compact", "pretty"]:
             log_file = temp_log_file.replace(".log", f"_{fmt_type}.log")
             logger = setup_file_logger(
@@ -114,60 +155,30 @@ class TestSetupFileLogger:
             for handler in logger.handlers:
                 if hasattr(handler, 'stop'):
                     handler.stop()
-
-
-class TestSetupProductionLogger:
-    """setup_production_logger testleri"""
     
-    def test_setup_production_logger_console_only(self, clean_loggers):
-        """Sadece console ile setup_production_logger testi"""
-        logger = setup_production_logger(
-            name="test_prod",
-            console=True,
-            file_path=None
+    def test_setup_file_logger_return_handlers(self, clean_loggers, temp_log_file):
+        """setup_file_logger return_handlers=True ile handler'ları döndürür"""
+        logger, handlers = setup_file_logger(
+            name="test_file_handlers",
+            filename=temp_log_file,
+            return_handlers=True
         )
         
-        assert len(logger.handlers) >= 1
-    
-    def test_setup_production_logger_with_file(self, clean_loggers, temp_log_file):
-        """Console ve file ile setup_production_logger testi"""
-        logger = setup_production_logger(
-            name="test_prod_full",
-            console=True,
-            file_path=temp_log_file,
-            json_format=True
-        )
+        assert logger.name == "test_file_handlers"
+        assert isinstance(handlers, list)
+        assert len(handlers) == 1
         
-        assert len(logger.handlers) >= 2
+        logger.info("Test message")
         
-        # Handler'ları durdur
-        for handler in logger.handlers:
-            if hasattr(handler, 'stop'):
-                handler.stop()
-
-
-class TestGetLogger:
-    """get_logger testleri"""
-    
-    def test_get_logger_basic(self, clean_loggers):
-        """Temel get_logger testi"""
-        logger = get_logger(name="test_get")
-        
-        assert logger is not None
-        assert len(logger.handlers) > 0
-    
-    def test_get_logger_with_service_name(self, clean_loggers):
-        """Service name ile get_logger testi"""
-        logger = get_logger(name="test_service", service_name="order-service")
-        
-        assert logger is not None
+        # Handler'ı temizle
+        handlers[0].stop()
 
 
 class TestTraceContextFilter:
     """TraceContextFilter testleri"""
     
     def test_trace_context_filter(self, clean_loggers):
-        """TraceContextFilter testi"""
+        """TraceContextFilter aktif context'ten trace bilgilerini log record'a ekler"""
         from microlog.context import TraceContext, set_current_context
         
         filter_obj = TraceContextFilter()
@@ -207,4 +218,3 @@ class TestTraceContextFilter:
         assert record2.span_id == "span-456"
         
         set_current_context(None)
-
